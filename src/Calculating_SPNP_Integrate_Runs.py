@@ -10,7 +10,7 @@ controls_directory = data_directory+'controls/%s/'%class_system
 
 # In[2]:
 
-n_controls = 230
+n_controls = 1000
 
 
 # In[3]:
@@ -30,7 +30,7 @@ from time import time
 empirical = pd.read_hdf(data_directory+'empirical.h5', 'df')
 
 
-# In[ ]:
+# In[6]:
 
 def running_stats(empirical,
                   df_name,
@@ -56,7 +56,6 @@ def running_stats(empirical,
             print("Data not loading for %s. Continuing."%f)
             continue
             
-
         if M is None:
             M = x
             S = 0
@@ -69,36 +68,34 @@ def running_stats(empirical,
         M_previous = M
 #         M = M_previous.add( x.subtract(M_previous)/k )
 #         S = ( x.subtract(M_previous).multiply( x.subtract(M) ) ).add(S)
+#         print(x.dtypes)
+#         print(x.shape)
+#         empirical.iloc[:,0]>x.iloc[:,0]
         M = M_previous+((x-M_previous)/k)
         S += (x-M_previous)*(x-M)
         p += (empirical>x).astype('int')
 #         all_max = maximum(all_max, x)
 #         all_min = minimum(all_min, x)
         gc.collect()  
-#     standard_deviation = sqrt(S/(k-1))
-
-    return M, S, p, k
-
-
-# In[ ]:
-
-M, S, p, k = running_stats(empirical, 'df', 'synthetic_control', controls_directory)
+    standard_deviation = sqrt(S/(k-1))
+    z_scores = (empirical-M)/standard_deviation
+    print(k)
+    return M, S, p/k, z_scores
 
 
-# In[ ]:
+# In[7]:
 
-standard_deviation = sqrt(S/(k-1))
-empirical_percentile = p/k
+M, standard_deviation, empirical_percentile, empirical_z_scores = running_stats(empirical, 'df', 'synthetic_control', controls_directory)
 
 
-# In[ ]:
+# In[8]:
 
-for df in [M, standard_deviation, empirical_percentile]:
+for df in [M, standard_deviation, empirical_percentile, empirical_z_scores]:
     df['patent_number'] = empirical['patent_number']
     df['filing_year'] = empirical['filing_year']
 
 
-# In[ ]:
+# In[9]:
 
 store = pd.HDFStore(data_directory+'summary_statistics.h5',
                         mode='a', table=True)
@@ -108,7 +105,7 @@ store.put('/randomized_std_%s'%(class_system), standard_deviation, 'table', appe
 store.put('/empirical_percentile_%s'%(class_system), empirical_percentile, 'table', append=False)
 # store.put('/randomized_min_%s'%(class_system), all_min, 'table', append=False)
 
-z_scores = (empirical-M)/standard_deviation
+z_scores = empirical_z_scores
 
 z_scores.values[where(z_scores==inf)]=nan 
 z_scores.values[where(z_scores==-inf)]=nan 
@@ -124,7 +121,7 @@ store.put('/empirical', empirical, 'table', append=False)
 store.close()
 
 
-# In[ ]:
+# In[10]:
 
 cp /home/jeffrey_alstott/technoinnovation/patent_centralities/data/centralities/summary_statistics.h5 /home/jeffrey_alstott/Dropbox/TechnoInnovation/
 

@@ -1,7 +1,7 @@
 
 # coding: utf-8
 
-# In[ ]:
+# In[1]:
 
 from os import path
 import sys
@@ -9,15 +9,15 @@ python_location = path.dirname(sys.executable)+'/python'
 basic_program = open('Calculating_SPNP.py', 'r').read()
 
 
-# In[ ]:
+# In[2]:
 
 data_directory = '/home/jeffrey_alstott/technoinnovation/patent_centralities/data/'
 class_system = 'USPC'
 
 
-# In[ ]:
+# In[5]:
 
-n_randomizations = 230
+n_randomizations = 1000
 
 first_rand_id = None
 
@@ -39,7 +39,7 @@ else:
     runs = unrun_iterations
 
 
-# In[ ]:
+# In[6]:
 
 from os import system
 

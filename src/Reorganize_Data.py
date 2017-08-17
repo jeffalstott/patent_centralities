@@ -1,13 +1,13 @@
 
 # coding: utf-8
 
-# In[2]:
+# In[1]:
 
 import pandas as pd
 from pylab import *
 
 
-# In[3]:
+# In[2]:
 
 data_input = '/home/jeffrey_alstott/Dropbox/Patent_centralities/'
 data_output = '/home/jeffrey_alstott/technoinnovation/patent_centralities/data/'
@@ -15,7 +15,7 @@ data_output = '/home/jeffrey_alstott/technoinnovation/patent_centralities/data/'
 
 # In[3]:
 
-patents = pd.read_csv(data_input+'PATENT_INFO.csv', 
+patents = pd.read_csv(data_input+'PATENT_INFO_1790_2015_no_citcount_no_centrality.csv', 
                  usecols=['patent_number', 'filing_year', 'mainclass_id'])
 
 
@@ -51,21 +51,27 @@ patents.dropna(inplace=True)
 del patents['mainclass_id']
 
 
-# In[7]:
+# In[9]:
 
-citations = pd.read_csv(data_input+'CITATION_INFO_classes_no_neg_citlag_CLEAN.csv', 
+citations = pd.read_csv(data_input+'CITATION_INFO.csv', 
                 usecols=['citing_id', 'cited_id', 
                          'filing_year_citing', 'filing_year_cited', 
                         ])
 
 
-# In[8]:
+# In[10]:
 
 citations.rename(columns={"citing_id": 'Citing_Patent',
                             "cited_id": 'Cited_Patent',
                             "filing_year_citing": 'Year_Citing_Patent',
                             "filing_year_cited": 'Year_Cited_Patent',
                              }, inplace=True)
+
+
+# In[11]:
+
+### Drop citations that are erroneous, having a citation that points to a future patent
+citations = citations[citations['Year_Citing_Patent']>=citations['Year_Cited_Patent']]
 
 
 # In[12]:
@@ -82,12 +88,12 @@ print(patents.shape)
 patents.to_hdf(data_output+'patents.h5', 'df', complevel=9, complib='blosc')
 
 
-# In[5]:
+# In[14]:
 
 patents.set_index('patent_number', inplace=True)
 
 
-# In[9]:
+# In[15]:
 
 for patent_type in ['Citing_Patent', 'Cited_Patent']:
     print(patent_type)
@@ -101,14 +107,14 @@ for patent_type in ['Citing_Patent', 'Cited_Patent']:
     citations['Class_%s'%patent_type] = z
 
 
-# In[10]:
+# In[16]:
 
 print(citations.shape)
 citations.dropna(inplace=True)
 print(citations.shape)
 
 
-# In[12]:
+# In[17]:
 
 citations.to_hdf(data_output+'citations.h5', 'df', complevel=9, complib='blosc')
 

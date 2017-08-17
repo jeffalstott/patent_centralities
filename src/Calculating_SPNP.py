@@ -5,8 +5,8 @@
 
 # data_directory = '../data/'
 # randomized_control = False
-# # randomization_id = 1
-# class_system = 'USPC'
+# randomization_id = 1
+class_system = 'USPC'
 
 
 # # Import Libraries
@@ -271,7 +271,10 @@ n_rows = vc.sort_index().cumsum().ix[1975:].sum()
 DF = pd.DataFrame(index=arange(n_rows), 
                   columns=["patent_number",
                            "observation_year",
-                          "SPNP_count"],
+                          "SPNP_count",
+                           "outgoing_path_count_log",
+                           "incoming_path_count_log",
+                          ]
 #                   dtype='uint64'
                  )
 size_in_GBs = (prod(DF.shape)*64)*1.25e-10
@@ -285,11 +288,15 @@ for observation_year in tqdm(year_list):
     G_subgraph = G.subgraph(patents_within_this_year, 
                             implementation="auto")
     n_row = G_subgraph.vcount()
-
+    
     DF.ix[this_year_data_start:this_year_data_start+n_row-1, 
-          'SPNP_count'] = (log(search_path_count_of_graph(G_subgraph, mode='OUT')+1) +
-                           log(count_incoming_paths[patents_within_this_year]+1)
-                           )
+          'outgoing_path_count_log'] = log(search_path_count_of_graph(G_subgraph, mode='OUT')+1)
+    DF.ix[this_year_data_start:this_year_data_start+n_row-1, 
+          'incoming_path_count_log'] = log(count_incoming_paths[patents_within_this_year]+1)
+#     DF.ix[this_year_data_start:this_year_data_start+n_row-1, 
+#           'SPNP_count'] = (log(search_path_count_of_graph(G_subgraph, mode='OUT')+1) +
+#                            log(count_incoming_paths[patents_within_this_year]+1)
+#                            )
     DF.ix[this_year_data_start:this_year_data_start+n_row-1, 
           'patent_number'] = G_subgraph.vs['patent_number']
     DF.ix[this_year_data_start:this_year_data_start+n_row-1, 
@@ -297,10 +304,11 @@ for observation_year in tqdm(year_list):
     del G_subgraph
     gc.collect()
     this_year_data_start += n_row
-
 DF['observation_year'] = DF['observation_year'].astype('uint16')
 DF['patent_number'] = DF['patent_number'].astype('uint32')
-DF['SPNP_count'] = DF['SPNP_count'].astype('float64')
+DF['outgoing_path_count_log'] = DF['outgoing_path_count_log'].astype('float64')
+DF['incoming_path_count_log'] = DF['incoming_path_count_log'].astype('float64')
+DF['SPNP_count'] = DF['outgoing_path_count_log']+DF['incoming_path_count_log']
 
 
 # # Report patents' centrality in t+2, t+3, t+5 and t+8
@@ -312,7 +320,7 @@ DF_patents.drop(['observation_year'], axis=1, inplace=True)
 DF_patents['filing_year'] = G.vs['filing_year']
 
 
-# In[18]:
+# In[15]:
 
 ti = time.time()
 # for patents filed AFTER 1975 report their centrality 3/5/8 years after filing
@@ -324,7 +332,7 @@ for horizon in tqdm([2,3,5,8]):
     DF_patents['filing_year+%i'%horizon] = DF_patents['fake_filing_year']+horizon
 
     # merge to add SPNP after $horizon years from filing
-    DF_patents = pd.merge(DF_patents, DF, 
+    DF_patents = pd.merge(DF_patents, DF.drop(['incoming_path_count_log','outgoing_path_count_log'], axis=1), 
                           how='left', left_on=['patent_number','filing_year+%i'%horizon], 
                           right_on=['patent_number','observation_year'],
                            suffixes=('', '_filing+%i'%horizon)
@@ -338,6 +346,9 @@ for horizon in tqdm([2,3,5,8]):
 
 del DF_patents['fake_filing_year']
 DF_patents.rename(columns={'SPNP_count': 'SPNP_count_2015'}, inplace=True)
+DF_patents.rename(columns={'outgoing_path_count_log': 'outgoing_path_count_log_2015'}, inplace=True)
+# DF_patents.rename(columns={'incoming_path_count_log': 'incoming_path_count_log_2015'}, inplace=True)
+
 tf = time.time()
 final_time_length = tf-ti
 print('Done! Reporting patent centrality after x years took: %f seconds' %final_time_length + '= %f minutes' %(final_time_length/60))
@@ -345,7 +356,7 @@ print('Done! Reporting patent centrality after x years took: %f seconds' %final_
 
 # # Compute centrality of cited patents in t-1
 
-# In[21]:
+# In[16]:
 
 citations = pd.merge(citations, DF,
                       how='left', on=None, left_on=['Cited_Patent','Year_Citing_Patent'], 
@@ -370,11 +381,11 @@ DF_patents.rename(columns={"mean": 'meanSPNPcited',
 
 # Some patents are cited the same year they were filed. For these patents we have no information on their SPNP the year before they were cited. We need to compute their SPNP the moment before they were cited. This is done by multiplying the number of incoming paths of the cited patent by the number of citations received in the year they were filed. This is only an approximation of the number of their outgoing paths, but it is not a bad one because they are unlikely to be cited by other patents granted in the same year that have received citations themselves.
 
-# In[1]:
+# In[17]:
 
 citations['Year_Citing_Patent-1'] = citations['Year_Citing_Patent'] - 1
 
-citations = pd.merge(citations, DF,
+citations = pd.merge(citations, DF.drop(['incoming_path_count_log', 'outgoing_path_count_log'], axis=1),
                       how='left', on=None, left_on=['Cited_Patent','Year_Citing_Patent-1'], 
                       right_on=['patent_number','observation_year'],
                       )
@@ -410,7 +421,7 @@ citations.ix[citations_same_year_ind,
 del citations_same_year_ind, citations_same_year, citations_same_year_count
 
 
-# In[23]:
+# In[18]:
 
 citations_grouped_by_citing = citations[['SPNP_count_cited_1year_before_citation',
                                           'Citing_Patent']].groupby(['Citing_Patent']).agg(['mean',
@@ -424,10 +435,26 @@ DF_patents.rename(columns={"mean": 'meanSPNPcited_1year_before',
                           "std": 'stdSPNPcited_1year_before'}, inplace=True)
 
 
+# In[19]:
+
+citations.rename(columns={"incoming_path_count_log": 'incoming_path_count_log_cited'}, inplace=True)
+
+citations_grouped_by_citing = citations[['incoming_path_count_log_cited',
+                                          'Citing_Patent']].groupby(['Citing_Patent']).agg(['mean',
+                                                                                            'std'])
+
+DF_patents = pd.merge(DF_patents, citations_grouped_by_citing['incoming_path_count_log_cited'], 
+                      how='left', left_on='patent_number', 
+                      right_index=True)
+
+DF_patents.rename(columns={"mean": 'mean_incoming_path_count_log_cited',
+                          "std": 'std_incoming_path_count_log_cited'}, inplace=True)
+
+
 # Store data
 # ===
 
-# In[42]:
+# In[20]:
 
 DF_patents['filing_year'] = DF_patents['filing_year'].astype('uint16')
 DF_patents['patent_number'] = DF_patents['patent_number'].astype('uint32')
@@ -439,7 +466,7 @@ for c in DF_patents.columns:
         DF_patents[c] = DF_patents[c].astype('float32')
 
 
-# In[43]:
+# In[21]:
 
 if not randomized_control:
     DF_patents.to_hdf(data_directory+'centralities/empirical.h5', 'df', complevel=9, complib='blosc')
@@ -448,7 +475,7 @@ else:
                                                                                          randomization_id), 'df', complevel=9, complib='blosc')
 
 
-# In[44]:
+# In[22]:
 
 final_time_length = time.time()-start_time
 
